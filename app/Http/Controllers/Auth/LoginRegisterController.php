@@ -62,8 +62,7 @@ class LoginRegisterController extends Controller
             'password' => 'required'
         ]);
 
-        if(Auth::attempt($credentials))
-        {
+        if (Auth::attempt($credentials)) {
             $request->session()->regenerate();
             return redirect()->route('home');
         }
@@ -71,33 +70,25 @@ class LoginRegisterController extends Controller
         return back()->withErrors([
             'email' => 'Your provided credentials do not match in our records.',
         ])->onlyInput('email');
-
     }
-
-    // public function home(): View
-    // {
-    //     $folders = Folder::where('user_id', Auth::id())->get();
-    //     return view('auth.home', compact('folders'));
-    //     // return view('auth.home');
-    // }
-
 
     public function home(Request $request): View
     {
         $query = $request->input('search'); // Get search query from the request
-        $folders = Folder::where('user_id', Auth::id()) // Filter by the authenticated user's ID
-            ->whereNull('parent_id')
+
+        //where('user_id', Auth::id()) // Filter by the authenticated user's ID
+        $folders = Folder::whereNull('parent_id')
             ->when($query, function ($queryBuilder) use ($query) {
                 return $queryBuilder->where('name', 'like', "%{$query}%"); // Filter folders by name
             })
             ->get();
 
-        // Fetch files
-        $files = File::where('user_id', Auth::id()) // Filter by the authenticated user's ID
-        ->when($query, function ($queryBuilder) use ($query) {
-            return $queryBuilder->where('name', 'like', "%{$query}%"); // Filter files by name
-        })
-        ->get();
+        // Fetch files ->where('user_id', Auth::id()) // Filter by the authenticated user's ID
+        $files = File::whereNull('folder_id')
+            ->when($query, function ($queryBuilder) use ($query) {
+                return $queryBuilder->where('name', 'like', "%{$query}%"); // Filter files by name
+            })
+            ->get();
 
 
         return view('auth.home', compact('folders', 'files'));
@@ -105,8 +96,7 @@ class LoginRegisterController extends Controller
 
     public function logout(Request $request): RedirectResponse
     {
-
-       Auth::logout();
+        Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
         return redirect()->route('login')

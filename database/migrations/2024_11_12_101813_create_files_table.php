@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('path');
             $table->integer('size');
+            $table->integer('status')->default(0);
             $table->timestamps();
 
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');

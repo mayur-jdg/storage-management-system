@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('name');
             $table->unsignedBigInteger('user_id');
             $table->unsignedBigInteger('parent_id')->nullable();
+            $table->integer('status')->default(0);
             $table->timestamps();
 
             // Foreign key constraint

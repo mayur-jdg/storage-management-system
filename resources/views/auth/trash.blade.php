@@ -16,7 +16,7 @@
                     <!-- Show "Trash" only if the login type is 1 -->
                     @if (Auth::user() && Auth::user()->type == 1)
                         <li class="nav-item">
-                            <a class="nav-link d-flex align-items-center text-dark" href="{{ route('trash') }}">
+                            <a class="nav-link d-flex align-items-center text-dark" href="#">
                                 <i class="fas fa-trash-alt me-2 text-danger"></i> <!-- FontAwesome icon for "Trash" -->
                                 Trash
                             </a>
@@ -35,38 +35,19 @@
                             value="{{ request('search') }}">
                     </form>
 
-                    <!-- Dropdown Button -->
-                    @if (Auth::user() && Auth::user()->type == 1)
-                        <div class="dropdown">
-                            <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
-                                data-bs-toggle="dropdown" aria-expanded="false">
-                                Create New
-                            </button>
-                            <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal"
-                                        data-bs-target="#createFolderModal">New Folder</a></li>
-                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal"
-                                        data-bs-target="#uploadFileModal">Upload Files</a></li>
-                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal"
-                                    data-bs-target="#uploadFolderModal">Upload Folder</a></li>
-                            </ul>
-                        </div>
-                    @endif
-
                     <!-- Action Buttons -->
                     <div>
                         <!-- Show "Delete" button only if the login type is 1 -->
                         @if (Auth::user() && Auth::user()->type == 1)
-                            <button class="btn btn-primary">Share</button>
-                            <button class="btn btn-success">Download</button>
-                            <button class="btn btn-danger">Delete</button>
+                            <button class="btn btn-success">Restore</button>
+                            <button class="btn btn-danger">Permanently  Delete</button>
                         @endif
                     </div>
                 </div>
 
                 <!-- Main Card Content -->
                 <div class="card">
-                    <div class="card-header">Files</div>
+                    <div class="card-header">Trash Files</div>
                     <div class="card-body">
                         {{-- <div class="alert alert-success">
                         @if ($message = Session::get('success'))
