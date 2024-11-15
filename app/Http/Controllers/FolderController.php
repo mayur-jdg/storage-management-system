@@ -54,9 +54,17 @@ class FolderController extends Controller
         // }
 
         // Get the files inside the folder (assuming you have a 'files' relationship)
-        $files = $folder->files; // Assuming there's a 'files' relationship on the Folder model
-         // Get child folders where the parent_id matches the current folder's id
+        // $files = $folder->files; // Assuming there's a 'files' relationship on the Folder model
+        $files = $folder->files()
+            ->where('status', 0)
+            ->when($query, function ($queryBuilder) use ($query) {
+                return $queryBuilder->where('name', 'like', "%{$query}%"); // Filter files by name
+            })
+            ->get();
+
+        // Get child folders where the parent_id matches the current folder's id
         $childFolders = Folder::where('parent_id', $folder->id)
+        ->where('status', 0)
         ->when($query, function ($queryBuilder) use ($query) {
             return $queryBuilder->where('name', 'like', "%{$query}%"); // Filter folders by name
         })
@@ -111,7 +119,52 @@ class FolderController extends Controller
         return response()->json(['message' => 'Folders and files uploaded successfully!']);
     }
 
+    public function uploadToFolder(Request $request)
+    {
+        // Validate the incoming request
+        $request->validate([
+            'folder_id' => 'required|exists:folders,id',
+            'folder_names' => 'required|string',  // Expecting folder names as a JSON string
+            'files' => 'required|array',
+            'files.*' => 'file',
+        ]);
 
+        // Decode the folder names from JSON
+        $folderNames = json_decode($request->input('folder_names'), true);
+        $folderId = $request->input('folder_id');
+        // Ensure that files are included in the request
+        if ($request->hasFile('files')) {
+            $files = $request->file('files');
+
+            // Loop through the folder names and save them
+            foreach ($folderNames as $folderName) {
+                // Create or find each folder in the database
+                $folder = Folder::firstOrCreate([
+                    'name' => $folderName,
+                    'user_id' => Auth::id(),
+                    'parent_id' => $folderId // Set to null for root-level folders, you can adjust as needed
+                ]);
+
+                // Loop through the files and associate each one with the current folder
+                foreach ($files as $file) {
+                    // Store the file
+                    $filePath = $file->store('uploads', 'public');
+                    $fileName = $file->getClientOriginalName();
+
+                    // Create the file record and associate it with the folder
+                    File::create([
+                        'name' => $fileName,
+                        'path' => $filePath,
+                        'size' => $file->getSize(),
+                        'user_id' => Auth::id(),
+                        'folder_id' => $folder->id // Link the file to the correct folder
+                    ]);
+                }
+            }
+        }
+
+        return response()->json(['message' => 'Folders and files uploaded successfully!']);
+    }
 
 
 }

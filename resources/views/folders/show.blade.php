@@ -15,7 +15,7 @@
                     </li>
                     @if (Auth::user() && Auth::user()->type == 1)
                         <li class="nav-item">
-                            <a class="nav-link d-flex align-items-center text-dark" href="#">
+                            <a class="nav-link d-flex align-items-center text-dark" href="{{ route('trash') }}">
                                 <i class="fas fa-trash-alt me-2 text-danger"></i> <!-- FontAwesome icon for "Trash" -->
                                 Trash
                             </a>
@@ -46,7 +46,8 @@
                                         data-bs-target="#createFolderModal">New Folder</a></li>
                                 <li><a class="dropdown-item" href="#" data-bs-toggle="modal"
                                         data-bs-target="#uploadFileModal">Upload Files</a></li>
-                                <li><a class="dropdown-item" href="#">Upload Folder</a></li>
+                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal"
+                                    data-bs-target="#uploadFolderModal">Upload Folder</a></li>
                             </ul>
                         </div>
                     @endif
@@ -55,15 +56,22 @@
                     <div>
                         @if (Auth::user() && Auth::user()->type == 1)
                             <button class="btn btn-primary">Share</button>
-                            <button class="btn btn-success">Download</button>
+                            <button class="btn btn-success" id="downloadSelectedItems">Download</button>
                             <button class="btn btn-danger">Delete</button>
                         @endif
                     </div>
                 </div>
                 <!-- Folder Content -->
                 <div class="card">
-                    <div class="card-header">
+                    {{-- <div class="card-header">
                         {{ $folder->name }}
+                    </div> --}}
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>{{ $folder->name }}</span>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary me-2" id="selectAll">Select All</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="deselectAll">Deselect All</button>
+                        </div>
                     </div>
 
                     <div class="card-body">
@@ -76,7 +84,7 @@
                                             <!-- Checkbox in the top-right corner -->
                                             @if (Auth::user() && Auth::user()->type == 1)
                                                 <input type="checkbox"
-                                                    class="form-check-input position-absolute top-0 end-0 m-2"
+                                                    class="form-check-input position-absolute top-0 end-0 m-2 folder-checkbox"
                                                     style="z-index: 1;" name="childFolderSelect[]"
                                                     value="{{ $childFolder->id }}">
                                             @endif
@@ -106,7 +114,7 @@
                                 <div class="col-md-2 mb-3">
                                     <div class="card position-relative">
                                         @if (Auth::user() && Auth::user()->type == 1)
-                                        <input type="checkbox" class="form-check-input position-absolute top-0 end-0 m-2"
+                                        <input type="checkbox" class="form-check-input position-absolute top-0 end-0 m-2 file-checkbox"
                                             style="z-index: 1;" name="fileSelect[]" value="{{ $file->id }}">
                                         @endif
 
@@ -224,8 +232,67 @@
         </div>
     </div>
 
+    <!-- Modal for Uploading Folders -->
+    <div class="modal fade" id="uploadFolderModal" tabindex="-1" aria-labelledby="uploadFolderModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="uploadFolderModalLabel">Upload Folders</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="uploadFolderForm" enctype="multipart/form-data">
+                        @csrf
+                        <div class="mb-3">
+                            <label for="folders" class="form-label">Choose Folders</label>
+                            <input type="file" class="form-control" id="folders" name="folders[]" webkitdirectory multiple required>
+                        </div>
+                        <input type="hidden" name="folder_id" value="{{ $folder->id }}">
+                        <button type="submit" class="btn btn-primary">Upload Folder</button>
+                    </form>
+                    <div class="alert alert-success mt-2" id="folderSuccessMessage" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <script>
+        //soft delete Items
+        document.querySelector('.btn-danger').addEventListener('click', function() {
+            // Collect selected folder and file IDs
+            const selectedFolders = Array.from(document.querySelectorAll('input[name="childFolderSelect[]"]:checked')).map(input => input.value);
+            const selectedFiles = Array.from(document.querySelectorAll('input[name="fileSelect[]"]:checked')).map(input => input.value);
+
+            if (selectedFolders.length === 0 && selectedFiles.length === 0) {
+                alert('Please select at least one folder or file to delete.');
+                return;
+            }
+
+            // Send an AJAX request to delete the selected items
+            fetch('{{ route('delete.items') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    folders: selectedFolders,
+                    files: selectedFiles
+                })
+            }).then(response => response.json()).then(data => {
+                if (data.success) {
+                    alert('Items deleted successfully.');
+                    location.reload(); // Reload the page to update the status
+                } else {
+                    alert('Failed to delete items. Please try again.');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        });
+
         // Handle the AJAX submission for creating a folder
         $(document).ready(function() {
             $('#createFolderForm').on('submit', function(e) {
@@ -273,11 +340,57 @@
                     processData: false,
                     success: function(response) {
                         // Show success message and reload
-                        alert('Files uploaded successfully!');
+                        // alert('Files uploaded successfully!');
                         window.location.reload(); // Reload to reflect the uploaded files
                     },
                     error: function(xhr, status, error) {
                         alert('Error uploading files');
+                    }
+                });
+            });
+        });
+
+        //upload folder
+        $(document).ready(function() {
+            $('#uploadFolderForm').on('submit', function(e) {
+                e.preventDefault();
+
+                // Create a new FormData object
+                let formData = new FormData(this);
+
+                // Get the folder names dynamically
+                let folderNames = new Set();  // Set to hold unique folder names
+
+                // Loop through the selected files and extract folder names
+                let files = $('#folders')[0].files;
+                Array.from(files).forEach(file => {
+                    let path = file.webkitRelativePath;  // Get the relative path of the file
+                    let folderName = path.split('/')[0]; // The folder name is the first part of the path
+                    folderNames.add(folderName);  // Add the folder name to the set
+                });
+
+                // Append the folder names to the formData object
+                formData.append('folder_names', JSON.stringify(Array.from(folderNames)));
+
+                // Append the files to the formData object with the correct field name
+                Array.from(files).forEach(file => {
+                    formData.append('files[]', file);
+                });
+
+                // AJAX request to upload the folder
+                $.ajax({
+                    url: '{{ route('folders.uploadToFolder') }}',
+                    type: 'POST',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    success: function(response) {
+                        $('#uploadFolderModal').modal('hide');
+                        $('#folderSuccessMessage').text('Folder uploaded successfully!').show();
+                        window.location.reload(); // Page reload to show the new folders and files
+                    },
+                    error: function(xhr, status, error) {
+                        alert('Error uploading folder');
                     }
                 });
             });
@@ -351,5 +464,74 @@
                 }
             });
         });
+
+        //download Folder and files
+        $(document).ready(function() {
+        $('#downloadSelectedItems').on('click', function() {
+            var selectedFiles = [];
+            var selectedFolders = [];
+
+            // Collect selected files and folders
+            $('.file-checkbox:checked').each(function() {
+                selectedFiles.push($(this).val());
+            });
+            $('.folder-checkbox:checked').each(function() {
+                selectedFolders.push($(this).val());
+            });
+
+            if (selectedFiles.length > 0 || selectedFolders.length > 0) {
+                // Send the AJAX request with both selected files and folders
+                $.ajax({
+                    url: '{{ route('filesOrFolders.download') }}', // Route to the download method
+                    method: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        file_ids: selectedFiles,
+                        folder_ids: selectedFolders
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            // Trigger the download of the zip file
+                            window.location.href = response.download_url;
+                        } else {
+                            alert('Error occurred while downloading.');
+                        }
+                    },
+                    error: function() {
+                        alert('An error occurred while processing the download.');
+                    }
+                });
+            } else {
+                alert('Please select at least one file or folder to download.');
+            }
+        });
+    });
+
+    //select all or deselect all
+    const deselectAllButton = document.getElementById('deselectAll');
+    const checkboxes = document.querySelectorAll('.folder-checkbox, .file-checkbox');
+
+    // Update visibility of "Deselect All" button
+    function toggleDeselectButton() {
+        deselectAllButton.style.display = [...checkboxes].some(cb => cb.checked) ? 'inline-block' : 'none';
+    }
+
+    // Add event listeners to checkboxes
+    checkboxes.forEach(cb => cb.addEventListener('change', toggleDeselectButton));
+
+    // Initial button visibility check
+    toggleDeselectButton();
+
+    // "Select All" functionality
+    document.getElementById('selectAll').addEventListener('click', () => {
+        checkboxes.forEach(cb => cb.checked = true);
+        toggleDeselectButton();
+    });
+
+    // "Deselect All" functionality
+    deselectAllButton.addEventListener('click', () => {
+        checkboxes.forEach(cb => cb.checked = false);
+        toggleDeselectButton();
+    });
     </script>
 @endsection

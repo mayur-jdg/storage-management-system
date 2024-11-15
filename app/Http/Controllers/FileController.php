@@ -6,6 +6,7 @@ use App\Models\File;
 use App\Models\Folder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use ZipArchive;
 
 class FileController extends Controller
 {
@@ -85,6 +86,7 @@ class FileController extends Controller
 
         // Get the files inside the folder and filter by name if needed
         $files = $folder->files()
+            ->where('status', 0)
             ->when($query, function ($queryBuilder) use ($query) {
                 return $queryBuilder->where('name', 'like', "%{$query}%"); // Filter files by name
             })
@@ -92,6 +94,7 @@ class FileController extends Controller
 
         // Get child folders where the parent_id matches the current folder's id
         $childFolders = Folder::where('parent_id', $folder->id)
+        ->where('status', 0)
             ->when($query, function ($queryBuilder) use ($query) {
                 return $queryBuilder->where('name', 'like', "%{$query}%"); // Filter folders by name
             })
@@ -116,7 +119,6 @@ class FileController extends Controller
         ]);
     }
 
-    // FileController.php
     public function showFileDetailss($id)
     {
         $file = File::findOrFail($id);
@@ -126,5 +128,78 @@ class FileController extends Controller
             'file_name' => $file->name,
             'file_extension' => pathinfo($file->path, PATHINFO_EXTENSION),
         ]);
+    }
+    
+    public function downloadFilesOrFolders(Request $request)
+    {
+        // Validate the incoming request
+        $request->validate([
+            'file_ids' => 'nullable|array',
+            'file_ids.*' => 'exists:files,id', // Validate file IDs
+            'folder_ids' => 'nullable|array',
+            'folder_ids.*' => 'exists:folders,id', // Validate folder IDs
+        ]);
+
+        $zip = new ZipArchive;
+        $zipFileName = 'download_items_' . time() . '.zip';
+        $zipFilePath = storage_path('app/public/' . $zipFileName);
+
+        if ($zip->open($zipFilePath, ZipArchive::CREATE) === TRUE) {
+            // Process selected files
+            if ($request->has('file_ids')) {
+                $files = File::whereIn('id', $request->input('file_ids'))->get();
+                foreach ($files as $file) {
+                    $filePath = storage_path('app/public/' . $file->path);
+                    if (file_exists($filePath)) {
+                        $zip->addFile($filePath, $file->name);
+                    }
+                }
+            }
+
+            // Process selected folders
+            if ($request->has('folder_ids')) {
+                $folders = Folder::whereIn('id', $request->input('folder_ids'))->get();
+                foreach ($folders as $folder) {
+                    // Add folder to the zip
+                    $zip->addEmptyDir($folder->name);
+                    $this->addFolderToZip($zip, $folder);
+                }
+            }
+
+            // Close the zip file
+            $zip->close();
+
+            // Return the URL for the download
+            return response()->json([
+                'success' => true,
+                'download_url' => asset('storage/' . $zipFileName)
+            ]);
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => 'Could not create the zip file.'
+            ]);
+        }
+    }
+
+    // Helper function to recursively add folders and files to the zip
+    private function addFolderToZip($zip, $folder, $parentFolderName = '')
+    {
+        $folderPath = $parentFolderName ? $parentFolderName . '/' . $folder->name : $folder->name;
+
+        // Add files in the folder to the zip
+        $files = File::where('folder_id', $folder->id)->get();
+        foreach ($files as $file) {
+            $filePath = storage_path('app/public/' . $file->path);
+            if (file_exists($filePath)) {
+                $zip->addFile($filePath, $folderPath . '/' . $file->name);
+            }
+        }
+
+        // Recursively add subfolders
+        $subfolders = Folder::where('parent_id', $folder->id)->get();
+        foreach ($subfolders as $subfolder) {
+            $this->addFolderToZip($zip, $subfolder, $folderPath);
+        }
     }
 }

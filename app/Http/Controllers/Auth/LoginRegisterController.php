@@ -64,7 +64,11 @@ class LoginRegisterController extends Controller
 
         if (Auth::attempt($credentials)) {
             $request->session()->regenerate();
-            return redirect()->route('home');
+
+            // return redirect()->route('home');
+            // Check if there's a redirect URL and redirect the user back to that URL
+            $redirectUrl = $request->input('redirect_url', route('home'));
+            return redirect()->intended($redirectUrl);
         }
 
         return back()->withErrors([
@@ -78,6 +82,7 @@ class LoginRegisterController extends Controller
 
         //where('user_id', Auth::id()) // Filter by the authenticated user's ID
         $folders = Folder::whereNull('parent_id')
+            ->where('status', 0)
             ->when($query, function ($queryBuilder) use ($query) {
                 return $queryBuilder->where('name', 'like', "%{$query}%"); // Filter folders by name
             })
@@ -85,6 +90,7 @@ class LoginRegisterController extends Controller
 
         // Fetch files ->where('user_id', Auth::id()) // Filter by the authenticated user's ID
         $files = File::whereNull('folder_id')
+            ->where('status', 0)
             ->when($query, function ($queryBuilder) use ($query) {
                 return $queryBuilder->where('name', 'like', "%{$query}%"); // Filter files by name
             })

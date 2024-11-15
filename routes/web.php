@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\LoginRegisterController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\FolderController;
+use App\Http\Controllers\ShareController;
 use App\Http\Controllers\TrashController;
 use Illuminate\Support\Facades\Route;
 
@@ -29,6 +30,7 @@ Route::middleware('auth')->group(function() {
     Route::get('/folders/{folder}', [FolderController::class, 'show'])->name('folders.show');
 
     Route::post('/folders/upload', [FolderController::class, 'upload'])->name('folders.upload');
+    Route::post('/folders/upload-to-folder', [FolderController::class, 'uploadToFolder'])->name('folders.uploadToFolder');
 
     Route::get('/file', [FileController::class, 'index'])->name('files.index');
     Route::post('/files/upload', [FileController::class, 'upload'])->name('files.upload');
@@ -38,6 +40,16 @@ Route::middleware('auth')->group(function() {
 
     Route::get('/filess/{file}', [FileController::class, 'showFileDetails']);
     Route::get('/filess/{id}', [FileController::class, 'showFileDetailss'])->name('files.details');
+
+    Route::post('/files-or-folders/download', [FileController::class, 'downloadFilesOrFolders'])->name('filesOrFolders.download');
+
+    Route::get('/share/{token}', [ShareController::class, 'viewSharedItems'])->name('share.view');
+    Route::post('/share', [ShareController::class, 'generateShareLink'])->name('share.generate');
+
+    Route::post('/delete-items', [TrashController::class, 'deleteItems'])->name('delete.items');
+    Route::post('/restore-items', [TrashController::class, 'restoreItems'])->name('restore.items');
+    Route::post('/folders/permanently-delete', [TrashController::class, 'permanentlyDelete'])->name('folders.permanentlyDelete');
+
 
     Route::get('/trash', [TrashController::class, 'index'])->name('trash');
 });

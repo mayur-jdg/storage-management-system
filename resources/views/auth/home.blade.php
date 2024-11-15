@@ -57,8 +57,8 @@
                     <div>
                         <!-- Show "Delete" button only if the login type is 1 -->
                         @if (Auth::user() && Auth::user()->type == 1)
-                            <button class="btn btn-primary">Share</button>
-                            <button class="btn btn-success">Download</button>
+                            <button class="btn btn-primary" id="shareButton">Share</button>
+                            <button class="btn btn-success" id="downloadSelectedItems">Download</button>
                             <button class="btn btn-danger">Delete</button>
                         @endif
                     </div>
@@ -66,7 +66,13 @@
 
                 <!-- Main Card Content -->
                 <div class="card">
-                    <div class="card-header">Files</div>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Files</span>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary me-2" id="selectAll">Select All</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="deselectAll">Deselect All</button>
+                        </div>
+                    </div>
                     <div class="card-body">
                         {{-- <div class="alert alert-success">
                         @if ($message = Session::get('success'))
@@ -83,7 +89,7 @@
                                         <!-- Checkbox in the top-right corner -->
                                         @if (Auth::user() && Auth::user()->type == 1)
                                             <input type="checkbox"
-                                                class="form-check-input position-absolute top-0 end-0 m-2"
+                                                class="form-check-input position-absolute top-0 end-0 m-2 folder-checkbox"
                                                 style="z-index: 1;" name="folderSelect[]" value="{{ $folder->id }}">
                                         @endif
 
@@ -111,7 +117,7 @@
                                     <div class="card position-relative">
                                         @if (Auth::user() && Auth::user()->type == 1)
                                             <input type="checkbox"
-                                                class="form-check-input position-absolute top-0 end-0 m-2"
+                                                class="form-check-input position-absolute top-0 end-0 m-2 file-checkbox"
                                                 style="z-index: 1;" name="fileSelect[]" value="{{ $file->id }}">
                                         @endif
                                         <div class="card-body">
@@ -259,7 +265,43 @@
         </div>
     </div>
 
+
     <script>
+        //soft delete Items
+        document.querySelector('.btn-danger').addEventListener('click', function() {
+            // Collect selected folder and file IDs
+            const selectedFolders = Array.from(document.querySelectorAll('input[name="folderSelect[]"]:checked')).map(input => input.value);
+            const selectedFiles = Array.from(document.querySelectorAll('input[name="fileSelect[]"]:checked')).map(input => input.value);
+
+            if (selectedFolders.length === 0 && selectedFiles.length === 0) {
+                alert('Please select at least one folder or file to delete.');
+                return;
+            }
+
+            // Send an AJAX request to delete the selected items
+            fetch('{{ route('delete.items') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    folders: selectedFolders,
+                    files: selectedFiles
+                })
+            }).then(response => response.json()).then(data => {
+                if (data.success) {
+                    alert('Items deleted successfully.');
+                    location.reload(); // Reload the page to update the status
+                } else {
+                    alert('Failed to delete items. Please try again.');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        });
+
 
         //Previewing Files
 
@@ -368,7 +410,7 @@
             });
         });
 
-
+        //upload files
         $(document).ready(function() {
             $('#uploadFileForm').on('submit', function(e) {
                 e.preventDefault();
@@ -393,7 +435,7 @@
             });
         });
 
-
+        //upload folder
         $(document).ready(function() {
             $('#uploadFolderForm').on('submit', function(e) {
                 e.preventDefault();
@@ -439,6 +481,74 @@
             });
         });
 
+        //download Folder and files
+        $(document).ready(function() {
+        $('#downloadSelectedItems').on('click', function() {
+            var selectedFiles = [];
+            var selectedFolders = [];
+
+            // Collect selected files and folders
+            $('.file-checkbox:checked').each(function() {
+                selectedFiles.push($(this).val());
+            });
+            $('.folder-checkbox:checked').each(function() {
+                selectedFolders.push($(this).val());
+            });
+
+            if (selectedFiles.length > 0 || selectedFolders.length > 0) {
+                // Send the AJAX request with both selected files and folders
+                $.ajax({
+                    url: '{{ route('filesOrFolders.download') }}', // Route to the download method
+                    method: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        file_ids: selectedFiles,
+                        folder_ids: selectedFolders
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            // Trigger the download of the zip file
+                            window.location.href = response.download_url;
+                        } else {
+                            alert('Error occurred while downloading.');
+                        }
+                    },
+                    error: function() {
+                        alert('An error occurred while processing the download.');
+                    }
+                });
+            } else {
+                alert('Please select at least one file or folder to download.');
+            }
+        });
+    });
+
+    //select all or deselect all
+    const deselectAllButton = document.getElementById('deselectAll');
+    const checkboxes = document.querySelectorAll('.folder-checkbox, .file-checkbox');
+
+    // Update visibility of "Deselect All" button
+    function toggleDeselectButton() {
+        deselectAllButton.style.display = [...checkboxes].some(cb => cb.checked) ? 'inline-block' : 'none';
+    }
+
+    // Add event listeners to checkboxes
+    checkboxes.forEach(cb => cb.addEventListener('change', toggleDeselectButton));
+
+    // Initial button visibility check
+    toggleDeselectButton();
+
+    // "Select All" functionality
+    document.getElementById('selectAll').addEventListener('click', () => {
+        checkboxes.forEach(cb => cb.checked = true);
+        toggleDeselectButton();
+    });
+
+    // "Deselect All" functionality
+    deselectAllButton.addEventListener('click', () => {
+        checkboxes.forEach(cb => cb.checked = false);
+        toggleDeselectButton();
+    });
 
     </script>
 @endsection

@@ -40,7 +40,7 @@
                         <!-- Show "Delete" button only if the login type is 1 -->
                         @if (Auth::user() && Auth::user()->type == 1)
                             <button class="btn btn-success">Restore</button>
-                            <button class="btn btn-danger">Permanently  Delete</button>
+                            <button class="btn btn-danger" id="permanentlyDeleteBtn">Permanently  Delete</button>
                         @endif
                     </div>
                 </div>
@@ -240,7 +240,85 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+
+        // Permanently delete files
+        $(document).ready(function() {
+            $('#permanentlyDeleteBtn').on('click', function() {
+                // Show a confirmation prompt
+                const confirmation = confirm('Are you sure you want to permanently delete the selected items? This action cannot be undone.');
+
+                if (!confirmation) {
+                    return; // If the user cancels, do nothing
+                }
+
+                // Gather selected folder and file IDs
+                const folderIds = $('input[name="folderSelect[]"]:checked').map(function() {
+                    return $(this).val();
+                }).get();
+
+                const fileIds = $('input[name="fileSelect[]"]:checked').map(function() {
+                    return $(this).val();
+                }).get();
+
+                // Send AJAX request to delete selected items
+                $.ajax({
+                    url: '{{ route("folders.permanentlyDelete") }}',
+                    type: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        selectedFolders: folderIds,
+                        selectedFiles: fileIds
+                    },
+                    success: function(response) {
+                        alert('Selected items permanently deleted.');
+                        // Optionally, reload the page or update the DOM to reflect changes
+                        location.reload();
+                    },
+                    error: function(xhr) {
+                        alert('An error occurred while deleting items.');
+                        console.error(xhr.responseText);
+                    }
+                });
+            });
+        });
+
+
+        //restore delete Items
+        document.querySelector('.btn-success').addEventListener('click', function() {
+            // Collect selected folder and file IDs
+            const selectedFolders = Array.from(document.querySelectorAll('input[name="folderSelect[]"]:checked')).map(input => input.value);
+            const selectedFiles = Array.from(document.querySelectorAll('input[name="fileSelect[]"]:checked')).map(input => input.value);
+
+            if (selectedFolders.length === 0 && selectedFiles.length === 0) {
+                alert('Please select at least one folder or file to restore.');
+                return;
+            }
+
+            // Send an AJAX request to delete the selected items
+            fetch('{{ route('restore.items') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    folders: selectedFolders,
+                    files: selectedFiles
+                })
+            }).then(response => response.json()).then(data => {
+                if (data.success) {
+                    alert('Items restored successfully.');
+                    location.reload(); // Reload the page to update the status
+                } else {
+                    alert('Failed to restore items. Please try again.');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        });
 
         //Previewing Files
 
