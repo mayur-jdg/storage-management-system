@@ -55,7 +55,7 @@
                     <!-- Action Buttons -->
                     <div>
                         @if (Auth::user() && Auth::user()->type == 1)
-                            <button class="btn btn-primary">Share</button>
+                        <button class="btn btn-primary" id="shareButton" data-bs-toggle="modal" data-bs-target="#shareModal">Share</button>
                             <button class="btn btn-success" id="downloadSelectedItems">Download</button>
                             <button class="btn btn-danger">Delete</button>
                         @endif
@@ -82,12 +82,10 @@
                                     <div class="col-md-2 mb-3">
                                         <div class="card position-relative">
                                             <!-- Checkbox in the top-right corner -->
-                                            @if (Auth::user() && Auth::user()->type == 1)
                                                 <input type="checkbox"
                                                     class="form-check-input position-absolute top-0 end-0 m-2 folder-checkbox"
                                                     style="z-index: 1;" name="childFolderSelect[]"
                                                     value="{{ $childFolder->id }}">
-                                            @endif
 
                                             <div class="card-body">
                                                 <a href="{{ route('folders.show', $childFolder->id) }}">
@@ -113,10 +111,8 @@
                             @foreach ($files as $file)
                                 <div class="col-md-2 mb-3">
                                     <div class="card position-relative">
-                                        @if (Auth::user() && Auth::user()->type == 1)
                                         <input type="checkbox" class="form-check-input position-absolute top-0 end-0 m-2 file-checkbox"
                                             style="z-index: 1;" name="fileSelect[]" value="{{ $file->id }}">
-                                        @endif
 
                                         <div class="card-body">
                                             <a href="#" class="text-decoration-none" data-bs-toggle="modal"
@@ -256,8 +252,183 @@
         </div>
     </div>
 
+    <!-- Modal for Sharing Link -->
+    <div class="modal fade" id="shareModal" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="shareModalLabel">Share Selected Items</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Copy the link below to share your selected items:</p>
+                    <input type="text" id="shareLink" class="form-control mb-3" readonly>
+                    <button class="btn btn-primary" onclick="copyShareLink()">Copy Link</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
+        //select all or deselect all
+        const deselectAllButton = document.getElementById('deselectAll');
+        const checkboxes = document.querySelectorAll('.folder-checkbox, .file-checkbox');
+
+        // Update visibility of "Deselect All" button
+        function toggleDeselectButton() {
+            deselectAllButton.style.display = [...checkboxes].some(cb => cb.checked) ? 'inline-block' : 'none';
+        }
+
+        // Add event listeners to checkboxes
+        checkboxes.forEach(cb => cb.addEventListener('change', toggleDeselectButton));
+
+        // Initial button visibility check
+        toggleDeselectButton();
+
+        // "Select All" functionality
+        document.getElementById('selectAll').addEventListener('click', () => {
+            checkboxes.forEach(cb => cb.checked = true);
+            toggleDeselectButton();
+        });
+
+        // "Deselect All" functionality
+        deselectAllButton.addEventListener('click', () => {
+            checkboxes.forEach(cb => cb.checked = false);
+            toggleDeselectButton();
+        });
+
+        //Previewing Files
+        $(document).ready(function() {
+            let currentIndex = -1; // To keep track of the currently displayed file index
+            const files = @json($files); // Pass the files collection from Blade to JavaScript
+
+            // Function to load file details into the modal
+            function loadFileDetails(index) {
+                if (index < 0 || index >= files.length) return; // Do nothing if the index is out of bounds
+
+                const file = files[index];
+                currentIndex = index; // Update the current index
+
+                // Use AJAX to fetch the file details
+                $.ajax({
+                    url: '/filess/' + file.id, // Adjust the URL to your route for fetching file details
+                    method: 'GET',
+                    success: function(response) {
+                        // Check the file extension
+                        const fileExtension = response.file_extension.toLowerCase();
+                        let modalContent = '';
+
+                        if (['jpeg', 'png', 'jpg', 'gif'].includes(fileExtension)) {
+                            // Image preview
+                            modalContent =
+                                `<img src="${response.file_url}" class="img-fluid" alt="${response.file_name}">`;
+                        } else if (fileExtension === 'mp4') {
+                            // Video preview
+                            modalContent = `
+                        <video controls class="w-100">
+                            <source src="${response.file_url}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>`;
+                        } else {
+                            // Unsupported format message
+                            modalContent = '<p>File format not supported for preview.</p>';
+                        }
+
+                        // Update the modal content
+                        $('#filePreviewContent').html(modalContent);
+                    },
+                    error: function() {
+                        alert('Error fetching file details.');
+                    }
+                });
+            }
+
+            // Event listener for file preview links
+            $('a[data-bs-target="#filePreviewModal"]').on('click', function() {
+                const fileId = $(this).data('file-id');
+                const index = files.findIndex(file => file.id === fileId);
+                loadFileDetails(index);
+            });
+
+            // Event listeners for Previous and Next buttons
+            $('#prevFileBtn').on('click', function() {
+                if (currentIndex > 0) {
+                    loadFileDetails(currentIndex - 1);
+                }
+            });
+
+            $('#nextFileBtn').on('click', function() {
+                if (currentIndex < files.length - 1) {
+                    loadFileDetails(currentIndex + 1);
+                }
+            });
+        });
+
+        //download Folder and files
+        $(document).ready(function() {
+        $('#downloadSelectedItems').on('click', function() {
+            var selectedFiles = [];
+            var selectedFolders = [];
+
+            // Collect selected files and folders
+            $('.file-checkbox:checked').each(function() {
+                selectedFiles.push($(this).val());
+            });
+            $('.folder-checkbox:checked').each(function() {
+                selectedFolders.push($(this).val());
+            });
+
+            if (selectedFiles.length > 0 || selectedFolders.length > 0) {
+                // Send the AJAX request with both selected files and folders
+                $.ajax({
+                    url: '{{ route('filesOrFolders.download') }}', // Route to the download method
+                    method: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        file_ids: selectedFiles,
+                        folder_ids: selectedFolders
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            // Trigger the download of the zip file
+                            window.location.href = response.download_url;
+                        } else {
+                            alert('Error occurred while downloading.');
+                        }
+                    },
+                    error: function() {
+                        alert('An error occurred while processing the download.');
+                    }
+                });
+            } else {
+                alert('Please select at least one file or folder to download.');
+            }
+        });
+    });
+
+        //share copy link
+        document.getElementById('shareButton').addEventListener('click', function () {
+            // Collect selected folder and file IDs
+            let selectedFolders = Array.from(document.querySelectorAll('.folder-checkbox:checked')).map(cb => cb.value);
+            let selectedFiles = Array.from(document.querySelectorAll('.file-checkbox:checked')).map(cb => cb.value);
+
+            // Generate the shareable link
+            let baseUrl = `${window.location.origin}/share`;
+            let queryParams = new URLSearchParams();
+            if (selectedFolders.length) queryParams.append('folders', selectedFolders.join(','));
+            if (selectedFiles.length) queryParams.append('files', selectedFiles.join(','));
+
+            // Set the link in the modal input
+            document.getElementById('shareLink').value = `${baseUrl}?${queryParams.toString()}`;
+        });
+
+        function copyShareLink() {
+            let shareLinkInput = document.getElementById('shareLink');
+            shareLinkInput.select();
+            document.execCommand('copy');
+            // alert('Link copied to clipboard!');
+        }
+
         //soft delete Items
         document.querySelector('.btn-danger').addEventListener('click', function() {
             // Collect selected folder and file IDs
@@ -398,140 +569,7 @@
 
 
 
-        //Previewing Files
-        $(document).ready(function() {
-            let currentIndex = -1; // To keep track of the currently displayed file index
-            const files = @json($files); // Pass the files collection from Blade to JavaScript
 
-            // Function to load file details into the modal
-            function loadFileDetails(index) {
-                if (index < 0 || index >= files.length) return; // Do nothing if the index is out of bounds
 
-                const file = files[index];
-                currentIndex = index; // Update the current index
-
-                // Use AJAX to fetch the file details
-                $.ajax({
-                    url: '/filess/' + file.id, // Adjust the URL to your route for fetching file details
-                    method: 'GET',
-                    success: function(response) {
-                        // Check the file extension
-                        const fileExtension = response.file_extension.toLowerCase();
-                        let modalContent = '';
-
-                        if (['jpeg', 'png', 'jpg', 'gif'].includes(fileExtension)) {
-                            // Image preview
-                            modalContent =
-                                `<img src="${response.file_url}" class="img-fluid" alt="${response.file_name}">`;
-                        } else if (fileExtension === 'mp4') {
-                            // Video preview
-                            modalContent = `
-                        <video controls class="w-100">
-                            <source src="${response.file_url}" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video>`;
-                        } else {
-                            // Unsupported format message
-                            modalContent = '<p>File format not supported for preview.</p>';
-                        }
-
-                        // Update the modal content
-                        $('#filePreviewContent').html(modalContent);
-                    },
-                    error: function() {
-                        alert('Error fetching file details.');
-                    }
-                });
-            }
-
-            // Event listener for file preview links
-            $('a[data-bs-target="#filePreviewModal"]').on('click', function() {
-                const fileId = $(this).data('file-id');
-                const index = files.findIndex(file => file.id === fileId);
-                loadFileDetails(index);
-            });
-
-            // Event listeners for Previous and Next buttons
-            $('#prevFileBtn').on('click', function() {
-                if (currentIndex > 0) {
-                    loadFileDetails(currentIndex - 1);
-                }
-            });
-
-            $('#nextFileBtn').on('click', function() {
-                if (currentIndex < files.length - 1) {
-                    loadFileDetails(currentIndex + 1);
-                }
-            });
-        });
-
-        //download Folder and files
-        $(document).ready(function() {
-        $('#downloadSelectedItems').on('click', function() {
-            var selectedFiles = [];
-            var selectedFolders = [];
-
-            // Collect selected files and folders
-            $('.file-checkbox:checked').each(function() {
-                selectedFiles.push($(this).val());
-            });
-            $('.folder-checkbox:checked').each(function() {
-                selectedFolders.push($(this).val());
-            });
-
-            if (selectedFiles.length > 0 || selectedFolders.length > 0) {
-                // Send the AJAX request with both selected files and folders
-                $.ajax({
-                    url: '{{ route('filesOrFolders.download') }}', // Route to the download method
-                    method: 'POST',
-                    data: {
-                        _token: '{{ csrf_token() }}',
-                        file_ids: selectedFiles,
-                        folder_ids: selectedFolders
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            // Trigger the download of the zip file
-                            window.location.href = response.download_url;
-                        } else {
-                            alert('Error occurred while downloading.');
-                        }
-                    },
-                    error: function() {
-                        alert('An error occurred while processing the download.');
-                    }
-                });
-            } else {
-                alert('Please select at least one file or folder to download.');
-            }
-        });
-    });
-
-    //select all or deselect all
-    const deselectAllButton = document.getElementById('deselectAll');
-    const checkboxes = document.querySelectorAll('.folder-checkbox, .file-checkbox');
-
-    // Update visibility of "Deselect All" button
-    function toggleDeselectButton() {
-        deselectAllButton.style.display = [...checkboxes].some(cb => cb.checked) ? 'inline-block' : 'none';
-    }
-
-    // Add event listeners to checkboxes
-    checkboxes.forEach(cb => cb.addEventListener('change', toggleDeselectButton));
-
-    // Initial button visibility check
-    toggleDeselectButton();
-
-    // "Select All" functionality
-    document.getElementById('selectAll').addEventListener('click', () => {
-        checkboxes.forEach(cb => cb.checked = true);
-        toggleDeselectButton();
-    });
-
-    // "Deselect All" functionality
-    deselectAllButton.addEventListener('click', () => {
-        checkboxes.forEach(cb => cb.checked = false);
-        toggleDeselectButton();
-    });
     </script>
 @endsection

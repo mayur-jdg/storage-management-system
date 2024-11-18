@@ -57,7 +57,7 @@
                     <div>
                         <!-- Show "Delete" button only if the login type is 1 -->
                         @if (Auth::user() && Auth::user()->type == 1)
-                            <button class="btn btn-primary" id="shareButton">Share</button>
+                            <button class="btn btn-primary" id="shareButton" data-bs-toggle="modal" data-bs-target="#shareModal">Share</button>
                             <button class="btn btn-success" id="downloadSelectedItems">Download</button>
                             <button class="btn btn-danger">Delete</button>
                         @endif
@@ -87,11 +87,9 @@
                                 <div class="col-md-2 mb-3">
                                     <div class="card position-relative">
                                         <!-- Checkbox in the top-right corner -->
-                                        @if (Auth::user() && Auth::user()->type == 1)
                                             <input type="checkbox"
                                                 class="form-check-input position-absolute top-0 end-0 m-2 folder-checkbox"
                                                 style="z-index: 1;" name="folderSelect[]" value="{{ $folder->id }}">
-                                        @endif
 
                                         <div class="card-body">
                                             <a href="{{ route('folders.show', $folder) }}" class="text-decoration-none">
@@ -115,11 +113,9 @@
                             @foreach ($files as $file)
                                 <div class="col-md-2 mb-3">
                                     <div class="card position-relative">
-                                        @if (Auth::user() && Auth::user()->type == 1)
                                             <input type="checkbox"
                                                 class="form-check-input position-absolute top-0 end-0 m-2 file-checkbox"
                                                 style="z-index: 1;" name="fileSelect[]" value="{{ $file->id }}">
-                                        @endif
                                         <div class="card-body">
                                             <a href="#" class="text-decoration-none" data-bs-toggle="modal"
                                                 data-bs-target="#filePreviewModal" data-file-id="{{ $file->id }}">
@@ -265,46 +261,56 @@
         </div>
     </div>
 
+    <!-- Modal for Sharing Link -->
+    <div class="modal fade" id="shareModal" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="shareModalLabel">Share Selected Items</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Copy the link below to share your selected items:</p>
+                    <input type="text" id="shareLink" class="form-control mb-3" readonly>
+                    <button class="btn btn-primary" onclick="copyShareLink()">Copy Link</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <script>
-        //soft delete Items
-        document.querySelector('.btn-danger').addEventListener('click', function() {
-            // Collect selected folder and file IDs
-            const selectedFolders = Array.from(document.querySelectorAll('input[name="folderSelect[]"]:checked')).map(input => input.value);
-            const selectedFiles = Array.from(document.querySelectorAll('input[name="fileSelect[]"]:checked')).map(input => input.value);
 
-            if (selectedFolders.length === 0 && selectedFiles.length === 0) {
-                alert('Please select at least one folder or file to delete.');
-                return;
-            }
+        //select all or deselect all
+        const deselectAllButton = document.getElementById('deselectAll');
+        const checkboxes = document.querySelectorAll('.folder-checkbox, .file-checkbox');
 
-            // Send an AJAX request to delete the selected items
-            fetch('{{ route('delete.items') }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify({
-                    folders: selectedFolders,
-                    files: selectedFiles
-                })
-            }).then(response => response.json()).then(data => {
-                if (data.success) {
-                    alert('Items deleted successfully.');
-                    location.reload(); // Reload the page to update the status
-                } else {
-                    alert('Failed to delete items. Please try again.');
-                }
-            }).catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred. Please try again.');
-            });
+        // Update visibility of "Deselect All" button
+        function toggleDeselectButton() {
+            deselectAllButton.style.display = [...checkboxes].some(cb => cb.checked) ? 'inline-block' : 'none';
+        }
+
+        // Add event listeners to checkboxes
+        checkboxes.forEach(cb => cb.addEventListener('change', toggleDeselectButton));
+
+        // Initial button visibility check
+        toggleDeselectButton();
+
+        // "Select All" functionality
+        document.getElementById('selectAll').addEventListener('click', () => {
+            checkboxes.forEach(cb => cb.checked = true);
+            toggleDeselectButton();
+        });
+
+        // "Deselect All" functionality
+        deselectAllButton.addEventListener('click', () => {
+            checkboxes.forEach(cb => cb.checked = false);
+            toggleDeselectButton();
         });
 
 
-        //Previewing Files
 
+        //Previewing Files
         $(document).ready(function() {
             let currentIndex = -1; // To keep track of the currently displayed file index
             const files =
@@ -375,7 +381,117 @@
             });
         });
 
+        //download Folder and files
+        $(document).ready(function() {
+            $('#downloadSelectedItems').on('click', function() {
+                var selectedFiles = [];
+                var selectedFolders = [];
 
+                // Collect selected files and folders
+                $('.file-checkbox:checked').each(function() {
+                    selectedFiles.push($(this).val());
+                });
+                $('.folder-checkbox:checked').each(function() {
+                    selectedFolders.push($(this).val());
+                });
+
+                if (selectedFiles.length > 0 || selectedFolders.length > 0) {
+                    // Send the AJAX request with both selected files and folders
+                    $.ajax({
+                        url: '{{ route('filesOrFolders.download') }}', // Route to the download method
+                        method: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}',
+                            file_ids: selectedFiles,
+                            folder_ids: selectedFolders
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                // Trigger the download of the zip file
+                                window.location.href = response.download_url;
+                            } else {
+                                alert('Error occurred while downloading.');
+                            }
+                        },
+                        error: function() {
+                            alert('An error occurred while processing the download.');
+                        }
+                    });
+                } else {
+                    alert('Please select at least one file or folder to download.');
+                }
+            });
+        });
+
+        //share copy link
+        document.getElementById('shareButton').addEventListener('click', function () {
+            // Collect selected folder and file IDs
+            let selectedFolders = Array.from(document.querySelectorAll('.folder-checkbox:checked')).map(cb => cb.value);
+            let selectedFiles = Array.from(document.querySelectorAll('.file-checkbox:checked')).map(cb => cb.value);
+
+            // Send the data to the server to generate a unique link
+            fetch('/generate-shareable-link', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ folders: selectedFolders, files: selectedFiles })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Check if the response contains the link
+                if (data.link) {
+                    // Set the link in the modal input
+                    document.getElementById('shareLink').value = data.link;
+                } else {
+                    console.error('Link not received from the server.');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+
+        function copyShareLink() {
+            let shareLinkInput = document.getElementById('shareLink');
+            shareLinkInput.select();
+            document.execCommand('copy');
+            // alert('Link copied to clipboard!');
+        }
+
+        //soft delete Items
+        document.querySelector('.btn-danger').addEventListener('click', function() {
+            // Collect selected folder and file IDs
+            const selectedFolders = Array.from(document.querySelectorAll('input[name="folderSelect[]"]:checked')).map(input => input.value);
+            const selectedFiles = Array.from(document.querySelectorAll('input[name="fileSelect[]"]:checked')).map(input => input.value);
+
+            if (selectedFolders.length === 0 && selectedFiles.length === 0) {
+                alert('Please select at least one folder or file to delete.');
+                return;
+            }
+
+            // Send an AJAX request to delete the selected items
+            fetch('{{ route('delete.items') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    folders: selectedFolders,
+                    files: selectedFiles
+                })
+            }).then(response => response.json()).then(data => {
+                if (data.success) {
+                    alert('Items deleted successfully.');
+                    location.reload(); // Reload the page to update the status
+                } else {
+                    alert('Failed to delete items. Please try again.');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        });
 
 
         // Handle the AJAX submission for creating a folder
@@ -481,74 +597,7 @@
             });
         });
 
-        //download Folder and files
-        $(document).ready(function() {
-        $('#downloadSelectedItems').on('click', function() {
-            var selectedFiles = [];
-            var selectedFolders = [];
 
-            // Collect selected files and folders
-            $('.file-checkbox:checked').each(function() {
-                selectedFiles.push($(this).val());
-            });
-            $('.folder-checkbox:checked').each(function() {
-                selectedFolders.push($(this).val());
-            });
-
-            if (selectedFiles.length > 0 || selectedFolders.length > 0) {
-                // Send the AJAX request with both selected files and folders
-                $.ajax({
-                    url: '{{ route('filesOrFolders.download') }}', // Route to the download method
-                    method: 'POST',
-                    data: {
-                        _token: '{{ csrf_token() }}',
-                        file_ids: selectedFiles,
-                        folder_ids: selectedFolders
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            // Trigger the download of the zip file
-                            window.location.href = response.download_url;
-                        } else {
-                            alert('Error occurred while downloading.');
-                        }
-                    },
-                    error: function() {
-                        alert('An error occurred while processing the download.');
-                    }
-                });
-            } else {
-                alert('Please select at least one file or folder to download.');
-            }
-        });
-    });
-
-    //select all or deselect all
-    const deselectAllButton = document.getElementById('deselectAll');
-    const checkboxes = document.querySelectorAll('.folder-checkbox, .file-checkbox');
-
-    // Update visibility of "Deselect All" button
-    function toggleDeselectButton() {
-        deselectAllButton.style.display = [...checkboxes].some(cb => cb.checked) ? 'inline-block' : 'none';
-    }
-
-    // Add event listeners to checkboxes
-    checkboxes.forEach(cb => cb.addEventListener('change', toggleDeselectButton));
-
-    // Initial button visibility check
-    toggleDeselectButton();
-
-    // "Select All" functionality
-    document.getElementById('selectAll').addEventListener('click', () => {
-        checkboxes.forEach(cb => cb.checked = true);
-        toggleDeselectButton();
-    });
-
-    // "Deselect All" functionality
-    deselectAllButton.addEventListener('click', () => {
-        checkboxes.forEach(cb => cb.checked = false);
-        toggleDeselectButton();
-    });
 
     </script>
 @endsection

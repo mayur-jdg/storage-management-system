@@ -5,6 +5,7 @@ use App\Http\Controllers\FileController;
 use App\Http\Controllers\FolderController;
 use App\Http\Controllers\ShareController;
 use App\Http\Controllers\TrashController;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -14,15 +15,25 @@ Route::get('/', function () {
 Route::controller(LoginRegisterController::class)->group(function() {
     Route::get('/register', 'register')->name('register');
     Route::get('/login', 'login')->name('login');
+    Route::post('/store', [LoginRegisterController::class,'store'])->name('store');
     Route::post('/authenticate', 'authenticate')->name('authenticate');
 
     Route::post('/logout', 'logout')->name('logout');
 });
 
+Route::get('/controller', function () {
+    // $exitCode = Artisan::call('migrate');
+    Artisan::call('make:controller test');
+});
+
+Route::get('/migrate', function () {
+    Artisan::call('migrate');
+     Artisan::call('db:seed');
+});
+
 Route::middleware('auth')->group(function() {
 
     Route::get('/files', [LoginRegisterController::class,'home'])->name('home');
-    Route::post('/store', [LoginRegisterController::class,'store'])->name('store');
 
     Route::get('/folders/create', [FolderController::class, 'create'])->name('folders.create');
     Route::get('/folders', [FolderController::class, 'index'])->name('folders.index');
@@ -44,7 +55,8 @@ Route::middleware('auth')->group(function() {
     Route::post('/files-or-folders/download', [FileController::class, 'downloadFilesOrFolders'])->name('filesOrFolders.download');
 
     Route::get('/share/{token}', [ShareController::class, 'viewSharedItems'])->name('share.view');
-    Route::post('/share', [ShareController::class, 'generateShareLink'])->name('share.generate');
+    Route::post('/generate-shareable-link', [ShareController::class, 'generateShareableLink']);
+
 
     Route::post('/delete-items', [TrashController::class, 'deleteItems'])->name('delete.items');
     Route::post('/restore-items', [TrashController::class, 'restoreItems'])->name('restore.items');
